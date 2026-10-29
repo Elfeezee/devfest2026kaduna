@@ -1,6 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, ArrowLeft, Check, Code, Clock } from 'lucide-react';
 
+// Resolve the backend URL the same way SocketContext does
+const getBackendUrl = () => {
+  const PRODUCTION_BACKEND = 'https://devfest2026kaduna.onrender.com';
+  if (typeof window === 'undefined') return PRODUCTION_BACKEND;
+  const saved = localStorage.getItem('devfest_backend_url');
+  if (saved) return saved;
+  if (import.meta.env.VITE_SERVER_URL) return import.meta.env.VITE_SERVER_URL;
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:4000';
+  }
+  return PRODUCTION_BACKEND;
+};
+
 export default function QuizEditor({ onBackToHome }) {
   const [quizzes, setQuizzes] = useState([]);
   const [currentQuiz, setCurrentQuiz] = useState(null);
@@ -8,9 +21,7 @@ export default function QuizEditor({ onBackToHome }) {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    const fetchUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:4000/api/quizzes'
-      : '/api/quizzes';
+    const fetchUrl = `${getBackendUrl()}/api/quizzes`;
 
     fetch(fetchUrl)
       .then(res => res.json())
@@ -18,9 +29,15 @@ export default function QuizEditor({ onBackToHome }) {
         setQuizzes(data);
         if (data.length > 0) {
           setCurrentQuiz(JSON.parse(JSON.stringify(data[0])));
+        } else {
+          // No quizzes yet — show empty state instead of spinning forever
+          setCurrentQuiz(null);
         }
       })
-      .catch(err => console.error('Error fetching quizzes:', err));
+      .catch(err => {
+        console.error('Error fetching quizzes:', err);
+        setCurrentQuiz(null);
+      });
   }, []);
 
   const handleAddQuestion = () => {
@@ -71,9 +88,7 @@ export default function QuizEditor({ onBackToHome }) {
     setIsSaving(true);
     setSaveSuccess(false);
 
-    const saveUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:4000/api/quizzes'
-      : '/api/quizzes';
+    const saveUrl = `${getBackendUrl()}/api/quizzes`;
 
     try {
       const res = await fetch(saveUrl, {
@@ -92,6 +107,34 @@ export default function QuizEditor({ onBackToHome }) {
       setIsSaving(false);
     }
   };
+
+  if (quizzes.length === 0 && !currentQuiz) {
+    const emptyQuiz = {
+      id: `quiz_${Date.now()}`,
+      title: 'DevFest 2026 Quiz',
+      questions: [{
+        id: `q_${Date.now()}`,
+        question: 'What is Google I/O?',
+        options: ['A developer conference', 'A search engine', 'An AI model', 'A cloud service'],
+        correctIndex: 0,
+        timeLimit: 20,
+        points: 1000,
+        category: 'Google',
+        codeSnippet: ''
+      }]
+    };
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+        <p style={{ fontSize: '1.2rem', opacity: 0.7 }}>📋 No quizzes yet.</p>
+        <button className="btn-primary" onClick={() => { setQuizzes([emptyQuiz]); setCurrentQuiz(emptyQuiz); }}>
+          + Create Your First Quiz
+        </button>
+        <button onClick={onBackToHome} className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.9rem' }}>
+          ← Back to Arena
+        </button>
+      </div>
+    );
+  }
 
   if (!currentQuiz) {
     return (
