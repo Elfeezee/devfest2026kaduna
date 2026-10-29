@@ -12,6 +12,9 @@ try {
   console.error('Error loading default quizzes:', e);
 }
 
+// Basic profane words filter for live stage safety
+const BLOCKED_WORDS = ['admin', 'root', 'moderator', 'system', 'f**k', 'shit', 'bitch', 'asshole', 'nigger', 'porn', 'sex'];
+
 class GameManager {
   constructor(io) {
     this.io = io;
@@ -47,13 +50,31 @@ class GameManager {
     return pin;
   }
 
+  sanitizeNickname(name) {
+    if (!name || typeof name !== 'string') return 'Dev_' + Math.floor(100 + Math.random() * 900);
+    // Strip HTML and special control characters
+    let clean = name.replace(/[<>'"/\\&`]/g, '').trim().slice(0, 20);
+    if (clean.length === 0) clean = 'Dev_' + Math.floor(100 + Math.random() * 900);
+
+    const lower = clean.toLowerCase();
+    for (const bad of BLOCKED_WORDS) {
+      if (lower.includes(bad)) {
+        return 'CoolDev_' + Math.floor(100 + Math.random() * 900);
+      }
+    }
+    return clean;
+  }
+
   createRoom(hostSocket, quizId) {
     const quiz = quizzes.find(q => q.id === quizId) || quizzes[0];
     if (!quiz) throw new Error('Quiz not found');
 
     const pin = this.generatePin();
+    const hostToken = uuidv4(); // Secure token required for privileged host actions
+
     const room = {
       pin,
+      hostToken,
       hostSocketId: hostSocket.id,
       quiz: JSON.parse(JSON.stringify(quiz)), // clone
       currentQuestionIndex: -1,
@@ -75,24 +96,26 @@ class GameManager {
     hostSocket.join(`host:${pin}`);
 
     console.log(`[GameManager] Created room ${pin} with quiz: "${quiz.title}"`);
-    return room;
+    return { room, hostToken };
+  }
+
+  validateHost(pin, hostToken) {
+    const room = this.rooms.get(pin);
+    if (!room) return false;
+    return room.hostToken === hostToken;
   }
 
   joinRoom(playerSocket, pin, nickname, avatar = '🚀', existingPlayerId = null) {
     const room = this.rooms.get(pin);
     if (!room) {
-      return { success: false, error: 'Game PIN not found. Please verify the 6-digit code.' };
-    }
-
-    if (room.state !== 'LOBBY' && !existingPlayerId) {
-      return { success: false, error: 'Game has already started. Spectating or waiting for next game.' };
+      return { success: false, error: 'Game PIN not found. Please verify the 6-digit code on the main screen.' };
     }
 
     let player;
     let playerId = existingPlayerId;
 
     if (existingPlayerId && room.players.has(existingPlayerId)) {
-      // Reconnection
+      // Reconnection: restore previous session!
       player = room.players.get(existingPlayerId);
       const oldSocketId = player.socketId;
       if (oldSocketId) {
@@ -104,10 +127,12 @@ class GameManager {
       room.socketToPlayerId.set(playerSocket.id, playerId);
       console.log(`[GameManager] Player "${player.nickname}" reconnected to ${pin}`);
     } else {
-      // New Player
+      if (room.state !== 'LOBBY') {
+        return { success: false, error: 'Showdown has already started. Spectating current round.' };
+      }
+
       playerId = uuidv4();
-      // Ensure unique/clean nickname
-      const cleanNickname = (nickname || 'Dev_' + Math.floor(100 + Math.random() * 900)).trim().slice(0, 20);
+      const cleanNickname = this.sanitizeNickname(nickname);
 
       player = {
         id: playerId,
@@ -132,8 +157,28 @@ class GameManager {
     playerSocket.join(`room:${pin}`);
     playerSocket.join(`player:${playerId}`);
 
-    // Notify host with updated player list/count
+    // Notify host with updated player count and sample recent players
     this.broadcastLobbyUpdate(room);
+
+    // If player reconnected mid-question, give them current question details
+    let currentQuestionPayload = null;
+    if (room.state === 'QUESTION') {
+      const q = room.quiz.questions[room.currentQuestionIndex];
+      const remainingMs = Math.max(0, room.questionDuration - (Date.now() - room.questionStartTime));
+      currentQuestionPayload = {
+        questionNumber: room.currentQuestionIndex + 1,
+        totalQuestions: room.quiz.questions.length,
+        optionsCount: q.options.length,
+        options: q.options,
+        question: q.question,
+        codeSnippet: q.codeSnippet || null,
+        timeLimit: Math.ceil(remainingMs / 1000),
+        durationMs: remainingMs,
+        serverStartTime: room.questionStartTime,
+        hasAnswered: player.currentAnswer !== null,
+        selectedAnswer: player.currentAnswer
+      };
+    }
 
     return {
       success: true,
@@ -144,15 +189,35 @@ class GameManager {
       score: player.score,
       state: room.state,
       currentQuestionIndex: room.currentQuestionIndex,
-      totalQuestions: room.quiz.questions.length
+      totalQuestions: room.quiz.questions.length,
+      currentQuestion: currentQuestionPayload
     };
+  }
+
+  kickPlayer(pin, hostToken, playerId) {
+    if (!this.validateHost(pin, hostToken)) return { success: false, error: 'Unauthorized host' };
+    const room = this.rooms.get(pin);
+    if (!room) return { success: false, error: 'Room not found' };
+
+    const player = room.players.get(playerId);
+    if (!player) return { success: false, error: 'Player not found' };
+
+    if (player.socketId) {
+      this.io.to(player.socketId).emit('player:kicked', { reason: 'Removed by host' });
+      room.socketToPlayerId.delete(player.socketId);
+      this.playerToRoom.delete(player.socketId);
+    }
+    room.players.delete(playerId);
+    this.broadcastLobbyUpdate(room);
+
+    return { success: true };
   }
 
   broadcastLobbyUpdate(room) {
     const playerCount = room.players.size;
-    // For high concurrency (1000 players), send sample recent players for visual display + count
+    // Send top 50 recent players for UI display + exact total count
     const recentPlayers = Array.from(room.players.values())
-      .slice(-40)
+      .slice(-50)
       .map(p => ({ id: p.id, nickname: p.nickname, avatar: p.avatar }));
 
     this.io.to(`host:${room.pin}`).emit('host:lobby-update', {
@@ -197,7 +262,6 @@ class GameManager {
     this.io.to(`room:${room.pin}`).emit('game:question-intro', introPayload);
 
     setTimeout(() => {
-      // Ensure room is still alive
       if (!this.rooms.has(room.pin)) return;
       this.activateQuestion(room, question);
     }, 2800);
@@ -222,13 +286,12 @@ class GameManager {
       serverStartTime: room.questionStartTime
     });
 
-    // Players receive question number, options count (or text depending on mode), and time limit
-    // Kahoot style: player phone displays 4 colored shape buttons
+    // Players receive question number, options, code snippet and timer
     this.io.to(`room:${room.pin}`).emit('player:question-active', {
       questionNumber: room.currentQuestionIndex + 1,
       totalQuestions: room.quiz.questions.length,
       optionsCount: question.options.length,
-      options: question.options, // include text so players on mobile can also read choices
+      options: question.options,
       question: question.question,
       codeSnippet: question.codeSnippet || null,
       timeLimit: question.timeLimit || 20,
@@ -236,7 +299,7 @@ class GameManager {
       serverStartTime: room.questionStartTime
     });
 
-    // Schedule automatic timeout
+    // Automatic timeout timer
     clearTimeout(room.questionTimer);
     room.questionTimer = setTimeout(() => {
       if (room.state === 'QUESTION') {
@@ -244,7 +307,7 @@ class GameManager {
       }
     }, room.questionDuration + 300);
 
-    // Periodic batch tally updates to host (throttled every 200ms)
+    // Periodic batch tally updates to host (every 200ms)
     this.startTallyBatcher(room);
   }
 
@@ -274,28 +337,25 @@ class GameManager {
     if (!player || player.currentAnswer !== null) return { success: false, error: 'Already answered' };
 
     const question = room.quiz.questions[room.currentQuestionIndex];
-    const timeTaken = Date.now() - room.questionStartTime;
+    const timeTaken = Math.max(0, Math.min(Date.now() - room.questionStartTime, room.questionDuration));
     const maxTime = room.questionDuration;
 
     player.currentAnswer = answerIndex;
     player.answerTimeMs = timeTaken;
 
-    // Tally update
     if (answerIndex >= 0 && answerIndex < 4) {
       room.answerTally[answerIndex] = (room.answerTally[answerIndex] || 0) + 1;
     }
     room.totalAnswered++;
 
-    // Calculate score: Kahoot formula (1000 max, scaling down to 500 based on speed) + streak bonus
+    // Scoring formula: Speed scaled (1000 -> 500) + streak bonus (up to +500)
     const isCorrect = answerIndex === question.correctIndex;
     player.isCorrect = isCorrect;
 
     if (isCorrect) {
       player.streak++;
       const timeRatio = Math.min(Math.max(timeTaken / maxTime, 0), 1);
-      // Speed multiplier: 1.0 (instant) down to 0.5 (last second)
       const speedScore = Math.round((1 - timeRatio / 2) * (question.points || 1000));
-      // Streak bonus: +100 for each streak above 1 (max +500)
       const streakBonus = Math.min((player.streak - 1) * 100, 500);
       player.pointsAwarded = speedScore + streakBonus;
       player.score += player.pointsAwarded;
@@ -304,13 +364,13 @@ class GameManager {
       player.pointsAwarded = 0;
     }
 
-    // Acknowledge player
+    // Acknowledge player immediately
     this.io.to(socketId).emit('player:answer-received', {
       answerIndex,
       isAnswered: true
     });
 
-    // If everyone has answered, finish question early
+    // If 100% of participants answered, end question early
     if (room.totalAnswered >= room.players.size && room.players.size > 0) {
       clearTimeout(room.questionTimer);
       clearInterval(room.tallyBatchTimer);
@@ -328,7 +388,7 @@ class GameManager {
 
     const question = room.quiz.questions[room.currentQuestionIndex];
 
-    // Calculate Ranks across all players
+    // High performance O(N log N) rank sorting
     const sortedPlayers = Array.from(room.players.values()).sort((a, b) => b.score - a.score);
     sortedPlayers.forEach((p, idx) => {
       p.rank = idx + 1;
@@ -347,7 +407,7 @@ class GameManager {
       question: question.question
     });
 
-    // Send individual results to each player
+    // Send individual results to connected players
     for (const player of room.players.values()) {
       if (player.socketId && player.connected) {
         this.io.to(player.socketId).emit('player:question-results', {
@@ -404,7 +464,6 @@ class GameManager {
 
     this.io.to(`host:${room.pin}`).emit('host:podium', podium);
 
-    // Notify all players
     for (const player of room.players.values()) {
       if (player.socketId && player.connected) {
         this.io.to(player.socketId).emit('player:podium', {
@@ -417,7 +476,7 @@ class GameManager {
     }
   }
 
-  // BOT SIMULATOR FOR 1000 PLAYERS STRESS TESTING AT DEVFEST!
+  // BOT SIMULATOR FOR CONCURRENCY BENCHMARKING
   simulateBots(roomPin, count = 100) {
     const room = this.rooms.get(roomPin);
     if (!room) return { success: false, error: 'Room not found' };
@@ -436,7 +495,7 @@ class GameManager {
 
       const bot = {
         id: playerId,
-        socketId: null, // Virtual
+        socketId: null,
         nickname: name,
         avatar,
         score: 0,
@@ -457,7 +516,6 @@ class GameManager {
     return { success: true, totalPlayers: room.players.size };
   }
 
-  // Answer automation for simulated bots during question
   triggerBotAnswers(roomPin) {
     const room = this.rooms.get(roomPin);
     if (!room || room.state !== 'QUESTION') return;
@@ -467,12 +525,10 @@ class GameManager {
 
     for (const player of room.players.values()) {
       if (player.isBot && player.currentAnswer === null) {
-        // Random latency between 800ms and (duration - 1500ms)
         const delay = Math.floor(600 + Math.random() * Math.min(room.questionDuration - 1000, 12000));
         setTimeout(() => {
           if (room.state !== 'QUESTION' || player.currentAnswer !== null) return;
 
-          // Bots have 75% accuracy or random pick
           let pickIndex;
           if (Math.random() < 0.70) {
             pickIndex = question.correctIndex;
@@ -523,7 +579,6 @@ class GameManager {
 
     if (meta.isHost) {
       console.log(`[GameManager] Host disconnected from room ${meta.pin}`);
-      // Give host 60s grace period to reconnect before tearing room down
     } else {
       const player = room.players.get(meta.playerId);
       if (player) {

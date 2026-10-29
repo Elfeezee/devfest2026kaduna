@@ -30,6 +30,7 @@ const SHAPES = [
 export default function HostView({ onBackToHome }) {
   const { socket, isConnected } = useSocket();
   const [pin, setPin] = useState(null);
+  const [hostToken, setHostToken] = useState(null);
   const [quizInfo, setQuizInfo] = useState(null);
   const [gameState, setGameState] = useState('INIT'); // INIT, LOBBY, INTRO, QUESTION, RESULTS, LEADERBOARD, PODIUM
   const [players, setPlayers] = useState([]);
@@ -57,8 +58,9 @@ export default function HostView({ onBackToHome }) {
 
     socket.emit('host:create-game', { quizId: 'devfest-2026' });
 
-    socket.on('host:game-created', ({ pin, quiz }) => {
+    socket.on('host:game-created', ({ pin, hostToken: token, quiz }) => {
       setPin(pin);
+      setHostToken(token);
       setQuizInfo(quiz);
       setGameState('LOBBY');
     });
@@ -178,23 +180,30 @@ export default function HostView({ onBackToHome }) {
 
   const handleStartGame = () => {
     if (!socket || !pin) return;
-    socket.emit('host:next-question', { pin });
+    socket.emit('host:next-question', { pin, hostToken });
   };
 
   const handleShowLeaderboard = () => {
     if (!socket || !pin) return;
-    socket.emit('host:show-leaderboard', { pin });
+    socket.emit('host:show-leaderboard', { pin, hostToken });
   };
 
   const handleNextQuestion = () => {
     if (!socket || !pin) return;
-    socket.emit('host:next-question', { pin });
+    socket.emit('host:next-question', { pin, hostToken });
   };
 
   const handleSimulateBots = (count) => {
     if (!socket || !pin) return;
     setIsAddingBots(true);
-    socket.emit('host:simulate-bots', { pin, count });
+    socket.emit('host:simulate-bots', { pin, hostToken, count });
+  };
+
+  const handleKickPlayer = (playerId) => {
+    if (!socket || !pin || !hostToken) return;
+    socket.emit('host:kick-player', { pin, hostToken, playerId }, (res) => {
+      if (res?.success) sounds.playPop();
+    });
   };
 
   const handleCopyPin = () => {
@@ -321,7 +330,9 @@ export default function HostView({ onBackToHome }) {
                       players.map((p) => (
                         <div
                           key={p.id}
+                          onClick={() => handleKickPlayer(p.id)}
                           className="glass-pill animate-pop"
+                          title="Click to remove player"
                           style={{
                             padding: '8px 16px',
                             display: 'flex',
@@ -329,7 +340,17 @@ export default function HostView({ onBackToHome }) {
                             gap: '8px',
                             fontSize: '1.05rem',
                             fontWeight: 600,
-                            background: 'rgba(255, 255, 255, 0.08)'
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(234, 67, 53, 0.25)';
+                            e.currentTarget.style.borderColor = 'rgba(234, 67, 53, 0.6)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
                           }}
                         >
                           <span style={{ fontSize: '1.2rem' }}>{p.avatar}</span>

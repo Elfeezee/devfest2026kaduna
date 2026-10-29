@@ -106,6 +106,13 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
       sounds.playFanfare();
     });
 
+    socket.on('player:kicked', ({ reason }) => {
+      alert(reason || 'You have been disconnected by the host.');
+      localStorage.removeItem('devfest_quiz_player');
+      setGameState('JOIN');
+      setJoined(false);
+    });
+
     return () => {
       socket.off('game:question-intro');
       socket.off('player:question-active');
@@ -113,6 +120,7 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
       socket.off('player:question-results');
       socket.off('player:leaderboard-view');
       socket.off('player:podium');
+      socket.off('player:kicked');
     };
   }, [socket, isConnected]);
 
@@ -139,7 +147,18 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
           setJoined(true);
           setPlayerId(res.playerId);
           setPlayerScore(res.score || 0);
-          setGameState(res.state === 'QUESTION' ? 'QUESTION' : 'LOBBY');
+
+          if (res.state === 'QUESTION' && res.currentQuestion) {
+            setQuestionData(res.currentQuestion);
+            if (res.currentQuestion.hasAnswered) {
+              setSelectedAnswer(res.currentQuestion.selectedAnswer);
+              setGameState('ANSWERED');
+            } else {
+              setGameState('QUESTION');
+            }
+          } else {
+            setGameState(res.state || 'LOBBY');
+          }
 
           // Save session to localStorage for resilience against refreshes/disconnects
           localStorage.setItem(

@@ -8,29 +8,43 @@ const GameManager = require('./gameManager');
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration for both local dev and production cloud deployment
-app.use(cors({ origin: '*' }));
+// CORS configuration supporting both local and all deployed domains (Firebase, Render, etc.)
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json({ limit: '10mb' }));
 
+// High-performance Socket.IO configuration engineered for 1,000+ simultaneous connections
 const io = new Server(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
   },
-  // High-performance settings for 1000+ concurrent connections
   pingInterval: 10000,
   pingTimeout: 5000,
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  // Disable compression on individual messages to minimize CPU usage during high concurrency
+  perMessageDeflate: false,
+  maxHttpBufferSize: 1e6 // 1MB
 });
 
 const gameManager = new GameManager(io);
 
-// REST APIs
+// REST API Health & Monitoring Endpoint
 app.get('/api/health', (req, res) => {
+  const memory = process.memoryUsage();
   res.json({
     status: 'ok',
-    uptime: process.uptime(),
+    uptimeSeconds: Math.floor(process.uptime()),
     activeRooms: gameManager.rooms.size,
+    totalConnectedSockets: io.engine.clientsCount,
+    memory: {
+      rssMb: Math.round(memory.rss / 1024 / 1024),
+      heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024)
+    },
     timestamp: new Date().toISOString()
   });
 });
@@ -48,18 +62,19 @@ app.post('/api/quizzes', (req, res) => {
   }
 });
 
-// Serve static frontend build if it exists
+// Serve static frontend build
 const distPath = path.join(__dirname, '..', 'client', 'dist');
 app.use(express.static(distPath));
 
-// WebSockets
+// WebSockets Management
 io.on('connection', (socket) => {
-  // HOST EVENTS
+  // HOST PRIVILEGED EVENTS
   socket.on('host:create-game', ({ quizId }) => {
     try {
-      const room = gameManager.createRoom(socket, quizId);
+      const { room, hostToken } = gameManager.createRoom(socket, quizId);
       socket.emit('host:game-created', {
         pin: room.pin,
+        hostToken, // secure token stored in host state
         quiz: {
           id: room.quiz.id,
           title: room.quiz.title,
@@ -72,27 +87,39 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('host:next-question', ({ pin }) => {
+  socket.on('host:next-question', ({ pin, hostToken }) => {
+    if (hostToken && !gameManager.validateHost(pin, hostToken)) {
+      return socket.emit('error', { message: 'Unauthorized host action' });
+    }
     const room = gameManager.rooms.get(pin);
     if (!room) return;
+
     gameManager.startNextQuestion(pin);
 
-    // If bots are present, auto-trigger their responses for the new question
+    // Auto-trigger simulated bots if present
     setTimeout(() => {
       gameManager.triggerBotAnswers(pin);
     }, 2800);
   });
 
-  socket.on('host:show-leaderboard', ({ pin }) => {
+  socket.on('host:show-leaderboard', ({ pin, hostToken }) => {
+    if (hostToken && !gameManager.validateHost(pin, hostToken)) {
+      return socket.emit('error', { message: 'Unauthorized host action' });
+    }
     gameManager.showLeaderboard(pin);
   });
 
-  socket.on('host:simulate-bots', ({ pin, count }) => {
+  socket.on('host:kick-player', ({ pin, hostToken, playerId }, callback) => {
+    const result = gameManager.kickPlayer(pin, hostToken, playerId);
+    if (typeof callback === 'function') callback(result);
+  });
+
+  socket.on('host:simulate-bots', ({ pin, hostToken, count }) => {
     const result = gameManager.simulateBots(pin, count || 100);
     socket.emit('host:bots-simulated', result);
   });
 
-  // PLAYER EVENTS
+  // PLAYER PARTICIPANT EVENTS
   socket.on('player:join', ({ pin, nickname, avatar, existingPlayerId }, callback) => {
     const result = gameManager.joinRoom(socket, pin, nickname, avatar, existingPlayerId);
     if (typeof callback === 'function') {
@@ -114,7 +141,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Fallback to React index.html for client-side routing
+// Single Page Application routing fallback
 app.get('*', (req, res) => {
   const indexPath = path.join(distPath, 'index.html');
   res.sendFile(indexPath, (err) => {
@@ -124,10 +151,21 @@ app.get('*', (req, res) => {
   });
 });
 
+// Graceful process exit
+const shutdown = () => {
+  console.log('[Server] Gracefully shutting down...');
+  server.close(() => {
+    console.log('[Server] Closed out remaining connections.');
+    process.exit(0);
+  });
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`===============================================`);
-  console.log(`🚀 DevFest 2026 Quiz Server listening on http://0.0.0.0:${PORT}`);
-  console.log(`Ready for 1,000+ concurrent players!`);
-  console.log(`===============================================`);
+  console.log(`=======================================================`);
+  console.log(`⚡ DevFest 2026 Quiz Server listening on http://0.0.0.0:${PORT}`);
+  console.log(`Ready for 1,000+ concurrent live participants!`);
+  console.log(`=======================================================`);
 });
