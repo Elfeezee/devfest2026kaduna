@@ -43,8 +43,13 @@ export const SocketProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    // Production backend is always https://devfest2026kaduna.onrender.com
+    // In local development, fall back to localhost:4000
+    // Admin can override via the settings modal (stored in localStorage)
+    const PRODUCTION_BACKEND = 'https://devfest2026kaduna.onrender.com';
+
     const savedBackend = typeof window !== 'undefined' ? localStorage.getItem('devfest_backend_url') : null;
-    
+
     let defaultUrl;
     if (savedBackend) {
       defaultUrl = savedBackend;
@@ -53,7 +58,8 @@ export const SocketProvider = ({ children }) => {
     } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       defaultUrl = 'http://localhost:4000';
     } else {
-      defaultUrl = window.location.origin;
+      // On devfestkaduna2026.web.app or any other production host, always point to Render
+      defaultUrl = PRODUCTION_BACKEND;
     }
 
     const s = initSocket(defaultUrl);

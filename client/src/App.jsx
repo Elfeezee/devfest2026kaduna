@@ -93,7 +93,7 @@ function ArenaApp() {
                   type="text"
                   value={customUrlInput}
                   onChange={(e) => setCustomUrlInput(e.target.value)}
-                  placeholder="e.g. http://localhost:4000 or https://your-server.onrender.com"
+                  placeholder="https://devfest2026kaduna.onrender.com"
                   style={{
                     width: '100%',
                     padding: '12px 14px',
@@ -107,22 +107,22 @@ function ArenaApp() {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setCustomUrlInput('https://devfest2026kaduna.onrender.com')}
+                  className="btn-primary"
+                  style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                >
+                  🌐 DevFest Render (Production)
+                </button>
                 <button
                   type="button"
                   onClick={() => setCustomUrlInput('http://localhost:4000')}
                   className="btn-secondary"
                   style={{ padding: '6px 12px', fontSize: '0.8rem' }}
                 >
-                  Local (localhost:4000)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomUrlInput(window.location.origin)}
-                  className="btn-secondary"
-                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                >
-                  Current Host
+                  💻 Local (localhost:4000)
                 </button>
               </div>
 
