@@ -6,22 +6,25 @@ const SocketContext = createContext(null);
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [activeUrl, setActiveUrl] = useState('');
 
-  useEffect(() => {
-    // In dev, connects to backend on port 4000; in prod, connects to current host
-    const serverUrl = import.meta.env.VITE_SERVER_URL 
-      || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:4000'
-        : window.location.origin);
+  const initSocket = (url) => {
+    if (socket) {
+      socket.disconnect();
+    }
 
-    const s = io(serverUrl, {
+    console.log('[Socket] Connecting to:', url);
+    setActiveUrl(url);
+
+    const s = io(url, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 10,
+      reconnectionAttempts: 15,
       reconnectionDelay: 1000,
+      timeout: 10000
     });
 
     s.on('connect', () => {
-      console.log('[Socket] Connected to server with ID:', s.id);
+      console.log('[Socket] Connected successfully with ID:', s.id);
       setIsConnected(true);
     });
 
@@ -30,15 +33,45 @@ export const SocketProvider = ({ children }) => {
       setIsConnected(false);
     });
 
+    s.on('connect_error', (err) => {
+      console.warn('[Socket] Connection error:', err.message);
+      setIsConnected(false);
+    });
+
     setSocket(s);
+    return s;
+  };
+
+  useEffect(() => {
+    const savedBackend = typeof window !== 'undefined' ? localStorage.getItem('devfest_backend_url') : null;
+    
+    let defaultUrl;
+    if (savedBackend) {
+      defaultUrl = savedBackend;
+    } else if (import.meta.env.VITE_SERVER_URL) {
+      defaultUrl = import.meta.env.VITE_SERVER_URL;
+    } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      defaultUrl = 'http://localhost:4000';
+    } else {
+      defaultUrl = window.location.origin;
+    }
+
+    const s = initSocket(defaultUrl);
 
     return () => {
-      s.disconnect();
+      if (s) s.disconnect();
     };
   }, []);
 
+  const setBackendUrl = (url) => {
+    if (!url) return;
+    const clean = url.trim().replace(/\/+$/, '');
+    localStorage.setItem('devfest_backend_url', clean);
+    initSocket(clean);
+  };
+
   return (
-    <SocketContext.Provider value={{ socket, isConnected }}>
+    <SocketContext.Provider value={{ socket, isConnected, activeUrl, setBackendUrl }}>
       {children}
     </SocketContext.Provider>
   );

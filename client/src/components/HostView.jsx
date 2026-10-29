@@ -268,6 +268,37 @@ export default function HostView({ onBackToHome }) {
 
       {/* Main Content Area based on State */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        {/* INIT / CONNECTING STATE */}
+        {gameState === 'INIT' && (
+          <div className="glass-panel animate-pop" style={{ maxWidth: '620px', margin: '0 auto', padding: '40px 32px', textAlign: 'center' }}>
+            <div className="animate-float" style={{ fontSize: '3.5rem', marginBottom: '16px' }}>
+              ⚡
+            </div>
+            <h2 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '12px' }}>
+              Connecting to Game Server...
+            </h2>
+            <p style={{ color: 'var(--text-sub)', fontSize: '1.05rem', lineHeight: 1.5, marginBottom: '24px' }}>
+              Waiting to establish real-time WebSocket connection to the game server.
+            </p>
+
+            <div style={{ background: 'rgba(66, 133, 244, 0.1)', border: '1px solid rgba(66, 133, 244, 0.3)', borderRadius: '14px', padding: '18px', textAlign: 'left', fontSize: '0.92rem', color: 'var(--text-sub)', marginBottom: '24px' }}>
+              <div style={{ fontWeight: 800, color: 'var(--google-blue)', marginBottom: '8px', fontSize: '1rem' }}>
+                💡 Quick Setup Guide
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                • <strong>Testing on this computer?</strong> Open <a href="http://localhost:4000" style={{ color: '#60a5fa', textDecoration: 'underline', fontWeight: 700 }}>http://localhost:4000</a> where the local server is already running!
+              </div>
+              <div>
+                • <strong>Testing from another phone or live?</strong> Click the <strong>Connecting...</strong> badge in the top right corner to set your cloud backend URL (e.g. Render / Cloud Run / tunnel).
+              </div>
+            </div>
+
+            <button onClick={onBackToHome} className="btn-secondary" style={{ width: '100%', padding: '14px' }}>
+              ← Return to Arena Menu
+            </button>
+          </div>
+        )}
+
         {/* LOBBY STATE */}
         {gameState === 'LOBBY' && (
           <div className="animate-pop" style={{ maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
