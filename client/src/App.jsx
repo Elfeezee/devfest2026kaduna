@@ -6,9 +6,10 @@ import QuizEditor from './components/QuizEditor';
 import { Play, Tv, Edit3, Settings, Sparkles, X, Check, Server } from 'lucide-react';
 
 function ArenaApp() {
-  const { isConnected, activeUrl, setBackendUrl } = useSocket();
+  const { isConnected, isWaking, activeUrl, setBackendUrl } = useSocket();
   const [view, setView] = useState('HOME'); // HOME, PLAYER, HOST, EDITOR
   const [initialPin, setInitialPin] = useState('');
+  const [selectedQuizId, setSelectedQuizId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [customUrlInput, setCustomUrlInput] = useState('');
 
@@ -45,8 +46,8 @@ function ArenaApp() {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            background: isConnected ? 'rgba(52, 168, 83, 0.15)' : 'rgba(234, 67, 53, 0.15)',
-            border: isConnected ? '1px solid rgba(52, 168, 83, 0.4)' : '1px solid rgba(234, 67, 53, 0.4)',
+            background: isConnected ? 'rgba(52, 168, 83, 0.15)' : isWaking ? 'rgba(251, 188, 4, 0.15)' : 'rgba(234, 67, 53, 0.15)',
+            border: isConnected ? '1px solid rgba(52, 168, 83, 0.4)' : isWaking ? '1px solid rgba(251,188,4,0.4)' : '1px solid rgba(234, 67, 53, 0.4)',
             cursor: 'pointer',
             color: '#fff'
           }}
@@ -57,10 +58,15 @@ function ArenaApp() {
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34A853', display: 'inline-block' }}></span>
               <span style={{ color: '#4ade80', fontWeight: 600 }}>Live Server Ready</span>
             </>
+          ) : isWaking ? (
+            <>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#FBBC04', display: 'inline-block', animation: 'pulse 1s infinite' }}></span>
+              <span style={{ color: '#fbbf24', fontWeight: 600 }}>Waking server... ☕</span>
+            </>
           ) : (
             <>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#EA4335', display: 'inline-block' }}></span>
-              <span style={{ color: '#ff6b6b', fontWeight: 600 }}>Connecting... (Click to configure)</span>
+              <span style={{ color: '#ff6b6b', fontWeight: 600 }}>Reconnecting...</span>
             </>
           )}
         </button>
@@ -257,8 +263,16 @@ function ArenaApp() {
       )}
 
       {view === 'PLAYER' && <PlayerView initialPin={initialPin} onBackToHome={() => setView('HOME')} />}
-      {view === 'HOST' && <HostView onBackToHome={() => setView('HOME')} />}
-      {view === 'EDITOR' && <QuizEditor onBackToHome={() => setView('HOME')} />}
+      {view === 'HOST' && <HostView onBackToHome={() => setView('HOME')} quizId={selectedQuizId} />}
+      {view === 'EDITOR' && (
+        <QuizEditor
+          onBackToHome={() => setView('HOME')}
+          onLaunchGame={(quizId) => {
+            setSelectedQuizId(quizId);
+            setView('HOST');
+          }}
+        />
+      )}
     </div>
   );
 }

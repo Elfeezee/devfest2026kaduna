@@ -27,7 +27,7 @@ const SHAPES = [
   { icon: '■', name: 'Square', colorClass: 'green' }
 ];
 
-export default function HostView({ onBackToHome }) {
+export default function HostView({ onBackToHome, quizId }) {
   const { socket, isConnected } = useSocket();
   const [pin, setPin] = useState(null);
   const [hostToken, setHostToken] = useState(null);
@@ -46,7 +46,8 @@ export default function HostView({ onBackToHome }) {
   const [leaderboardData, setLeaderboardData] = useState(null);
   const [podiumData, setPodiumData] = useState(null);
 
-  // UI state
+  // UI return snippet – replace placeholder with full render
+  // (Will be inserted later in return block)
   const [isMuted, setIsMuted] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
   const [isAddingBots, setIsAddingBots] = useState(false);
@@ -56,7 +57,7 @@ export default function HostView({ onBackToHome }) {
   useEffect(() => {
     if (!socket || !isConnected) return;
 
-    socket.emit('host:create-game', { quizId: 'devfest-2026' });
+    socket.emit('host:create-game', { quizId: quizId || 'devfest-2026' });
 
     socket.on('host:game-created', ({ pin, hostToken: token, quiz }) => {
       setPin(pin);
