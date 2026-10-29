@@ -1,0 +1,15 @@
+{
+  "name": "devfest-quiz-arena",
+  "version": "1.0.0",
+  "description": "High-concurrency Kahoot-style live quiz platform for DevFest 2026 (1,000+ players)",
+  "scripts": {
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build",
+    "start": "cd server && node server.js",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev"
+  },
+  "keywords": ["devfest", "kahoot", "quiz", "realtime", "socket.io", "react"],
+  "author": "",
+  "license": "MIT"
+}

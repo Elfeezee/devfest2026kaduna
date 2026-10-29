@@ -1,0 +1,122 @@
+[
+  {
+    "id": "devfest-2026",
+    "title": "DevFest 2026 Grand Tech Trivia",
+    "description": "The ultimate developer showdown covering Cloud, AI, Web, Android & Open Source!",
+    "questions": [
+      {
+        "id": "q1",
+        "question": "What is the primary language used to build cross-platform apps with Flutter?",
+        "options": [
+          "Kotlin",
+          "Dart",
+          "TypeScript",
+          "Rust"
+        ],
+        "correctIndex": 1,
+        "timeLimit": 20,
+        "points": 1000,
+        "category": "Mobile Dev"
+      },
+      {
+        "id": "q2",
+        "question": "In Google Cloud, which service is fully managed serverless container execution?",
+        "options": [
+          "Google Compute Engine",
+          "Cloud Storage",
+          "Cloud Run",
+          "Google Kubernetes Engine"
+        ],
+        "correctIndex": 2,
+        "timeLimit": 20,
+        "points": 1000,
+        "category": "Cloud"
+      },
+      {
+        "id": "q3",
+        "question": "What does 'LoRA' stand for in Generative AI fine-tuning?",
+        "options": [
+          "Low-Rank Adaptation",
+          "Linear Output Routing Algorithm",
+          "Local Recurrent Attention",
+          "Large Optical Recognition Array"
+        ],
+        "correctIndex": 0,
+        "timeLimit": 25,
+        "points": 1000,
+        "category": "AI / ML"
+      },
+      {
+        "id": "q4",
+        "question": "What will `console.log(typeof NaN)` output in JavaScript?",
+        "options": [
+          "\"undefined\"",
+          "\"NaN\"",
+          "\"object\"",
+          "\"number\""
+        ],
+        "correctIndex": 3,
+        "timeLimit": 15,
+        "points": 1000,
+        "category": "Web Dev",
+        "codeSnippet": "console.log(typeof NaN);"
+      },
+      {
+        "id": "q5",
+        "question": "Which HTTP status code signifies 'I'm a teapot' (RFC 2324)?",
+        "options": [
+          "404",
+          "418",
+          "502",
+          "401"
+        ],
+        "correctIndex": 1,
+        "timeLimit": 15,
+        "points": 1000,
+        "category": "Web Standards"
+      },
+      {
+        "id": "q6",
+        "question": "Who created the Git version control system and the Linux kernel?",
+        "options": [
+          "Linus Torvalds",
+          "Guido van Rossum",
+          "Ken Thompson",
+          "Dennis Ritchie"
+        ],
+        "correctIndex": 0,
+        "timeLimit": 15,
+        "points": 1000,
+        "category": "History & OSS"
+      },
+      {
+        "id": "q7",
+        "question": "In Docker, what is the layer caching mechanism primarily optimized for?",
+        "options": [
+          "Faster builds by reusing unchanged steps",
+          "Compressing RAM during container runtime",
+          "Encrypting network packets",
+          "Virtualizing GPU shaders"
+        ],
+        "correctIndex": 0,
+        "timeLimit": 20,
+        "points": 1000,
+        "category": "DevOps"
+      },
+      {
+        "id": "q8",
+        "question": "What is the key advantage of WebAssembly (Wasm) in modern browsers?",
+        "options": [
+          "It replaces HTML tags with binary bytecode",
+          "Near-native execution speed for intensive computing",
+          "Only works with Python scripts",
+          "Eliminates the need for CSS"
+        ],
+        "correctIndex": 1,
+        "timeLimit": 20,
+        "points": 1000,
+        "category": "Web Tech"
+      }
+    ]
+  }
+]
