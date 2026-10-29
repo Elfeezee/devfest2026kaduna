@@ -51,7 +51,9 @@ export default function HostView({ onBackToHome, quizId }) {
   const [isMuted, setIsMuted] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
   const [isAddingBots, setIsAddingBots] = useState(false);
+  const [reactions, setReactions] = useState([]);
   const timerRef = useRef(null);
+  const lastTickedRef = useRef(null);
 
   // Initialize game room on mount
   useEffect(() => {
@@ -72,6 +74,13 @@ export default function HostView({ onBackToHome, quizId }) {
       sounds.playPop();
     });
 
+    socket.on('game:reaction', (reaction) => {
+      setReactions(prev => [...prev.slice(-30), reaction]);
+      setTimeout(() => {
+        setReactions(prev => prev.filter(r => r.id !== reaction.id));
+      }, 3200);
+    });
+
     socket.on('game:question-intro', (intro) => {
       setGameState('INTRO');
       setResultsData(null);
@@ -86,6 +95,7 @@ export default function HostView({ onBackToHome, quizId }) {
       setTotalTime(data.timeLimit);
       setTally([0, 0, 0, 0]);
       setTotalAnswered(0);
+      lastTickedRef.current = null;
 
       // Start countdown
       const startTime = Date.now();
@@ -96,12 +106,14 @@ export default function HostView({ onBackToHome, quizId }) {
         const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
         setTimeLeft(remaining);
 
-        if (remaining <= 5 && remaining > 0) {
-          sounds.playTick();
+        if (remaining <= 5 && remaining > 0 && remaining !== lastTickedRef.current) {
+          lastTickedRef.current = remaining;
+          sounds.playTensionBeat(remaining);
         }
 
         if (remaining <= 0) {
           clearInterval(timerRef.current);
+          sounds.playBuzzer();
         }
       }, 250);
     });
@@ -117,7 +129,7 @@ export default function HostView({ onBackToHome, quizId }) {
       setResultsData(results);
       setTally(results.answerTally);
       setTotalAnswered(results.totalAnswered);
-      sounds.playCorrect();
+      sounds.playDing();
     });
 
     socket.on('host:leaderboard', (data) => {
@@ -144,6 +156,7 @@ export default function HostView({ onBackToHome, quizId }) {
       clearInterval(timerRef.current);
       socket.off('host:game-created');
       socket.off('host:lobby-update');
+      socket.off('game:reaction');
       socket.off('game:question-intro');
       socket.off('host:question-active');
       socket.off('host:tally-update');
@@ -225,6 +238,17 @@ export default function HostView({ onBackToHome, quizId }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', padding: '20px 32px' }}>
+      {/* Floating Emoji Reactions from Auditorium Audience */}
+      {reactions.map(rx => (
+        <div
+          key={rx.id}
+          className="floating-reaction-item"
+          style={{ left: `${rx.x}%` }}
+        >
+          {rx.emoji}
+        </div>
+      ))}
+
       {/* Top Bar */}
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -240,6 +264,23 @@ export default function HostView({ onBackToHome, quizId }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {/* Stage Soundboard */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginRight: '4px' }}>SFX</span>
+            <button onClick={() => sounds.playDrumroll()} className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }} title="Play Drumroll">
+              🥁 Roll
+            </button>
+            <button onClick={() => sounds.playApplause()} className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }} title="Play Crowd Cheer">
+              👏 Cheer
+            </button>
+            <button onClick={() => sounds.playDing()} className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }} title="Play Chime">
+              ✨ Ding
+            </button>
+            <button onClick={() => sounds.playBuzzer()} className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }} title="Play Buzzer">
+              🚨 Buzz
+            </button>
+          </div>
+
           {pin && (
             <div className="glass-pill" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 18px' }}>
               <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>GAME PIN:</span>

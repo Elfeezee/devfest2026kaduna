@@ -35,6 +35,7 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [roundResult, setRoundResult] = useState(null);
   const [podiumResult, setPodiumResult] = useState(null);
+  const [reactions, setReactions] = useState([]);
 
   // Check URL params for pin
   useEffect(() => {
@@ -62,6 +63,13 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
   // Socket listeners
   useEffect(() => {
     if (!socket || !isConnected) return;
+
+    socket.on('game:reaction', (reaction) => {
+      setReactions(prev => [...prev.slice(-20), reaction]);
+      setTimeout(() => {
+        setReactions(prev => prev.filter(r => r.id !== reaction.id));
+      }, 3200);
+    });
 
     socket.on('game:question-intro', (data) => {
       setGameState('INTRO');
@@ -114,6 +122,7 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
     });
 
     return () => {
+      socket.off('game:reaction');
       socket.off('game:question-intro');
       socket.off('player:question-active');
       socket.off('player:answer-received');
@@ -123,6 +132,25 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
       socket.off('player:kicked');
     };
   }, [socket, isConnected]);
+
+  const handleSendReaction = (emoji) => {
+    if (!socket || !joined) return;
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+    sounds.playPop();
+    socket.emit('player:reaction', { emoji });
+
+    const localRx = {
+      id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      emoji,
+      x: Math.floor(Math.random() * 65 + 15)
+    };
+    setReactions(prev => [...prev.slice(-20), localRx]);
+    setTimeout(() => {
+      setReactions(prev => prev.filter(r => r.id !== localRx.id));
+    }, 3200);
+  };
 
   const handleJoin = (e) => {
     e.preventDefault();
@@ -196,11 +224,69 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '20px',
+        paddingBottom: joined ? '90px' : '20px',
         maxWidth: '520px',
         margin: '0 auto',
         width: '100%'
       }}
     >
+      {/* Floating Reactions from Audience */}
+      {reactions.map(rx => (
+        <div
+          key={rx.id}
+          className="floating-reaction-item"
+          style={{ left: `${rx.x}%` }}
+        >
+          {rx.emoji}
+        </div>
+      ))}
+
+      {/* Interactive Audience Reaction Floating Bar */}
+      {joined && ['LOBBY', 'ANSWERED', 'RESULTS', 'PODIUM'].includes(gameState) && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            background: 'rgba(15, 23, 42, 0.88)',
+            backdropFilter: 'blur(16px)',
+            padding: '8px 20px',
+            borderRadius: '9999px',
+            border: '1px solid rgba(255, 255, 255, 0.25)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+            zIndex: 1000
+          }}
+        >
+          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            Hype
+          </span>
+          {['🔥', '🚀', '👏', '💡', '⚡'].map(emoji => (
+            <button
+              key={emoji}
+              onClick={() => handleSendReaction(emoji)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '1.6rem',
+                cursor: 'pointer',
+                padding: '4px',
+                transition: 'transform 0.15s ease'
+              }}
+              onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(1.35)')}
+              onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              onTouchStart={(e) => (e.currentTarget.style.transform = 'scale(1.35)')}
+              onTouchEnd={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* JOIN SCREEN */}
       {gameState === 'JOIN' && (
         <div className="glass-panel animate-pop" style={{ width: '100%', padding: '32px 24px' }}>
@@ -475,12 +561,21 @@ export default function PlayerView({ initialPin = '', onBackToHome }) {
             </div>
           </div>
 
-          {roundResult.streak > 1 && (
-            <div className="glass-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 18px', marginTop: '20px', color: '#ff7a00', fontWeight: 700 }}>
-              <Flame size={18} fill="#ff7a00" />
-              <span>Answer Streak: {roundResult.streak} in a row!</span>
-            </div>
-          )}
+          {/* Bonuses & Streak */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginTop: '20px' }}>
+            {roundResult.isSpeedDemon && (
+              <div className="speed-demon-badge animate-pop">
+                ⚡ SPEED DEMON (+200 PTS BONUS)
+              </div>
+            )}
+
+            {roundResult.streak > 1 ? (
+              <div className="streak-flame-badge">
+                <Flame size={20} fill="#fff" />
+                <span>🔥 {roundResult.streak} IN A ROW! ({roundResult.streakMultiplier || 1}x Multiplier)</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
 

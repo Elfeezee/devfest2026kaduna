@@ -136,6 +136,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('player:reaction', ({ emoji }) => {
+    gameManager.handleReaction(socket.id, emoji);
+  });
+
   socket.on('disconnect', () => {
     gameManager.handleDisconnect(socket.id);
   });

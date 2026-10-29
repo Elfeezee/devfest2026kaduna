@@ -348,20 +348,37 @@ class GameManager {
     }
     room.totalAnswered++;
 
-    // Scoring formula: Speed scaled (1000 -> 500) + streak bonus (up to +500)
+    // Scoring formula: Speed scaled (1000 -> 500) + Speed Demon Bonus (+200) + Streak Multiplier
     const isCorrect = answerIndex === question.correctIndex;
     player.isCorrect = isCorrect;
 
+    const isSpeedDemon = isCorrect && timeTaken <= 3000;
+    const speedBonus = isSpeedDemon ? 200 : 0;
+
     if (isCorrect) {
-      player.streak++;
+      player.streak = (player.streak || 0) + 1;
       const timeRatio = Math.min(Math.max(timeTaken / maxTime, 0), 1);
-      const speedScore = Math.round((1 - timeRatio / 2) * (question.points || 1000));
+      const basePoints = Math.round((1 - timeRatio / 2) * (question.points || 1000));
+
+      let streakMultiplier = 1.0;
+      if (player.streak >= 5) streakMultiplier = 1.5;
+      else if (player.streak >= 3) streakMultiplier = 1.3;
+      else if (player.streak >= 2) streakMultiplier = 1.1;
+
       const streakBonus = Math.min((player.streak - 1) * 100, 500);
-      player.pointsAwarded = speedScore + streakBonus;
-      player.score += player.pointsAwarded;
+      const totalEarned = Math.round(basePoints * streakMultiplier) + speedBonus + streakBonus;
+
+      player.pointsAwarded = totalEarned;
+      player.score += totalEarned;
+      player.isSpeedDemon = isSpeedDemon;
+      player.speedBonus = speedBonus;
+      player.streakMultiplier = streakMultiplier;
     } else {
       player.streak = 0;
       player.pointsAwarded = 0;
+      player.isSpeedDemon = false;
+      player.speedBonus = 0;
+      player.streakMultiplier = 1.0;
     }
 
     // Acknowledge player immediately
@@ -417,10 +434,29 @@ class GameManager {
           streak: player.streak,
           rank: player.rank,
           totalPlayers: room.players.size,
-          correctIndex: question.correctIndex
+          correctIndex: question.correctIndex,
+          isSpeedDemon: player.isSpeedDemon || false,
+          speedBonus: player.speedBonus || 0,
+          streakMultiplier: player.streakMultiplier || 1.0
         });
       }
     }
+  }
+
+  handleReaction(socketId, emoji) {
+    const meta = this.playerToRoom.get(socketId);
+    if (!meta || !meta.pin) return;
+    const allowed = ['🔥', '🚀', '👏', '💡', '⚡', '🎉', '❤️'];
+    if (!allowed.includes(emoji)) return;
+
+    const payload = {
+      id: `rx_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      emoji,
+      x: Math.floor(Math.random() * 80 + 10) // 10% to 90% across screen
+    };
+
+    this.io.to(`host:${meta.pin}`).emit('game:reaction', payload);
+    this.io.to(`room:${meta.pin}`).emit('game:reaction', payload);
   }
 
   showLeaderboard(roomPin) {
